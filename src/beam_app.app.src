@@ -1,0 +1,11 @@
+{application, beam_app,
+ [
+  {description, "Embedded Event Processing. Flow control"},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {env, []}
+ ]}.
