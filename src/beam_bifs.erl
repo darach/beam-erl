@@ -61,7 +61,7 @@
 %% Is the streaming value equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec eq(beam_flow:flow(), any()) -> digraph:vertex().
+-spec eq(beam_flow:flow(), any()) -> beam_flow:operator().
 eq(Flow, Y) -> 
   beam_flow:filter(Flow, fun(X) -> X == Y end).
 
@@ -70,7 +70,7 @@ eq(Flow, Y) ->
 %% Is the streaming value not equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec neq(beam_flow:flow(), any()) -> digraph:vertex().
+-spec neq(beam_flow:flow(), any()) -> beam_flow:operator().
 neq(Flow, Y) ->
   beam_flow:filter(Flow, fun(X) -> X /= Y end).
 
@@ -79,7 +79,7 @@ neq(Flow, Y) ->
 %% Is the streaming value less than or equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec lte(beam_flow:flow(), any()) -> digraph:vertex().
+-spec lte(beam_flow:flow(), any()) -> beam_flow:operator().
 lte(Flow, Y) ->
   beam_flow:filter(Flow, fun(X) -> X =< Y end).
 
@@ -88,7 +88,7 @@ lte(Flow, Y) ->
 %% Is the streaming value less than to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec lt(beam_flow:flow(), any()) -> digraph:vertex().
+-spec lt(beam_flow:flow(), any()) -> beam_flow:operator().
 lt(Flow, Y) ->
   beam_flow:filter(Flow, fun(X) -> X < Y end).
 
@@ -97,7 +97,7 @@ lt(Flow, Y) ->
 %% Is the streaming value greater than to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec gt(beam_flow:flow(), any()) -> digraph:vertex().
+-spec gt(beam_flow:flow(), any()) -> beam_flow:operator().
 gt(Flow, Y) ->
   beam_flow:filter(Flow, fun(X) -> X > Y end).
 
@@ -106,7 +106,7 @@ gt(Flow, Y) ->
 %% Is the streaming value greater than or equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec gte(beam_flow:flow(), any()) -> digraph:vertex().
+-spec gte(beam_flow:flow(), any()) -> beam_flow:operator().
 gte(Flow, Y) ->
   beam_flow:filter(Flow, fun(X) -> X >= Y end).
 
@@ -115,7 +115,7 @@ gte(Flow, Y) ->
 %% Is the streaming value exactly equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec seq(beam_flow:flow(), any()) -> digraph:vertex().
+-spec seq(beam_flow:flow(), any()) -> beam_flow:operator().
 seq(Flow, Y) ->
   beam_flow:filter(Flow, fun(X) -> X =:= Y end).
 
@@ -123,7 +123,7 @@ seq(Flow, Y) ->
 %% @doc
 %% Is the streaming value exactly not equal to some a priori known value
 %% @end
--spec sne(beam_flow:flow(), any()) -> digraph:vertex().
+-spec sne(beam_flow:flow(), any()) -> beam_flow:operator().
 sne(Flow, Y) ->
   beam_flow:filter(Flow, fun(X) -> X =/= Y end).
 
@@ -132,7 +132,7 @@ sne(Flow, Y) ->
 %% Emit the unary plus of the streaming value
 %% @end
 %%--------------------------------------------------------------------
--spec uplus(beam_flow:flow()) -> digraph:vertex().
+-spec uplus(beam_flow:flow()) -> beam_flow:operator().
 uplus(Flow) ->
   beam_flow:transform(Flow, fun(X) -> X end).
 
@@ -141,7 +141,7 @@ uplus(Flow) ->
 %% Emits the unary minus of the streaming value
 %% @end
 %%--------------------------------------------------------------------
--spec uminus(beam_flow:flow()) -> digraph:vertex().
+-spec uminus(beam_flow:flow()) -> beam_flow:operator().
 uminus(Flow) ->
   beam_flow:transform(Flow, fun(X) -> -X end).
 
@@ -150,7 +150,7 @@ uminus(Flow) ->
 %% Emit the addition of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec plus(beam_flow:flow(), number()) -> digraph:vertex().
+-spec plus(beam_flow:flow(), number()) -> beam_flow:operator().
 plus(Flow, Y) ->
   beam_flow:transform(Flow, fun(X) -> X + Y end).
 
@@ -159,7 +159,7 @@ plus(Flow, Y) ->
 %% Emit the subtraction of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec minus(beam_flow:flow(), number()) -> digraph:vertex().
+-spec minus(beam_flow:flow(), number()) -> beam_flow:operator().
 minus(Flow, Y) ->
   beam_flow:transform(Flow, fun(X) -> X - Y end).
 
@@ -168,7 +168,7 @@ minus(Flow, Y) ->
 %% Emit the multiplication of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec mul(beam_flow:flow(), number()) -> digraph:vertex().
+-spec mul(beam_flow:flow(), number()) -> beam_flow:operator().
 mul(Flow, Y) ->
   beam_flow:transform(Flow, fun(X) -> X * Y end).
 
@@ -177,7 +177,7 @@ mul(Flow, Y) ->
 %% Emit the floating point division of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec fdiv(beam_flow:flow(), float()) -> digraph:vertex().
+-spec fdiv(beam_flow:flow(), float()) -> beam_flow:operator().
 fdiv(Flow, Y) ->
   beam_flow:transform(Flow, fun(X) -> X / Y end).
 
@@ -186,7 +186,7 @@ fdiv(Flow, Y) ->
 %% Emit the integral division of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec idiv(beam_flow:flow(), integer()) -> digraph:vertex().
+-spec idiv(beam_flow:flow(), integer()) -> beam_flow:operator().
 idiv(Flow, Y) ->
   beam_flow:transform(Flow, fun(X) -> X div Y end).
 
@@ -195,7 +195,7 @@ idiv(Flow, Y) ->
 %% Emit the integral remainder of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec irem(beam_flow:flow(), integer()) -> digraph:vertex().
+-spec irem(beam_flow:flow(), integer()) -> beam_flow:operator().
 irem(Flow, Y) ->
   beam_flow:transform(Flow, fun(X) -> X rem Y end).
 
@@ -204,7 +204,7 @@ irem(Flow, Y) ->
 %% Emit the binary not of the streaming value
 %% @end
 %%--------------------------------------------------------------------
--spec ibnot(beam_flow:flow()) -> digraph:vertex().
+-spec ibnot(beam_flow:flow()) -> beam_flow:operator().
 ibnot(Flow) ->
   beam_flow:transform(Flow, fun(X) -> bnot X end).
 
@@ -213,7 +213,7 @@ ibnot(Flow) ->
 %% Emit the binary and of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec iband(beam_flow:flow(), integer()) -> digraph:vertex().
+-spec iband(beam_flow:flow(), integer()) -> beam_flow:operator().
 iband(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X band Y end).
 
@@ -222,7 +222,7 @@ iband(Flow,Y) ->
 %% Emit the binary or of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec ibor(beam_flow:flow(), integer()) -> digraph:vertex().
+-spec ibor(beam_flow:flow(), integer()) -> beam_flow:operator().
 ibor(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X bor Y end).
 
@@ -231,7 +231,7 @@ ibor(Flow,Y) ->
 %% Emit the binary xor of the streaming value and an a priori known vlaue
 %% @end
 %%--------------------------------------------------------------------
--spec ibxor(beam_flow:flow(), integer()) -> digraph:vertex().
+-spec ibxor(beam_flow:flow(), integer()) -> beam_flow:operator().
 ibxor(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X bxor Y end).
 
@@ -240,7 +240,7 @@ ibxor(Flow,Y) ->
 %% Emit the binary shift left of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec ibsl(beam_flow:flow(), integer()) -> digraph:vertex().
+-spec ibsl(beam_flow:flow(), integer()) -> beam_flow:operator().
 ibsl(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X bsl Y end).
 
@@ -249,7 +249,7 @@ ibsl(Flow,Y) ->
 %% Emit the binary shift right of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec ibsr(beam_flow:flow(), integer()) -> digraph:vertex().
+-spec ibsr(beam_flow:flow(), integer()) -> beam_flow:operator().
 ibsr(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X bsr Y end).
 
@@ -258,7 +258,7 @@ ibsr(Flow,Y) ->
 %% Emit the boolean not of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec bonot(beam_flow:flow()) -> digraph:vertex().
+-spec bonot(beam_flow:flow()) -> beam_flow:operator().
 bonot(Flow) ->
   beam_flow:transform(Flow, fun(X) -> not X end).
 
@@ -267,7 +267,7 @@ bonot(Flow) ->
 %% Emit the boolean and of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec boand(beam_flow:flow(), boolean()) -> digraph:vertex().
+-spec boand(beam_flow:flow(), boolean()) -> beam_flow:operator().
 boand(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X and Y end).
 
@@ -276,7 +276,7 @@ boand(Flow,Y) ->
 %% Emit the boolean or of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec boor(beam_flow:flow(), boolean()) -> digraph:vertex().
+-spec boor(beam_flow:flow(), boolean()) -> beam_flow:operator().
 boor(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X or Y end).
 
@@ -285,6 +285,6 @@ boor(Flow,Y) ->
 %% Emit the boolean xor of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec boxor(beam_flow:flow(), boolean()) -> digraph:vertex().
+-spec boxor(beam_flow:flow(), boolean()) -> beam_flow:operator().
 boxor(Flow,Y) ->
   beam_flow:transform(Flow, fun(X) -> X xor Y end).

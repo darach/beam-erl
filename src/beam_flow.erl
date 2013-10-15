@@ -40,13 +40,16 @@
 -export([push/3]).
 
 %% internal
--export([chain/2]).
 -export([infill/2]).
 
--type flow() :: { flow, digraph(), dict()}.
+-type flow() :: { flow, dict()}.
+-type operator() :: 
+  {filter | transform, fn, fun() } |
+  {filter | transform, mfa, atom(), atom(), list()}.
 -type push_internal() :: {branch | pipe | path, list() | []}.
 
 -export_type([flow/0]).
+-export_type([operator/0]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -55,34 +58,35 @@
 %%--------------------------------------------------------------------
 -spec new() -> flow().
 new() ->
-  {flow, digraph:new(), dict:new()}.
+  {flow, dict:new()}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Define a filter operation given a predicate (boolean returning) function
 %% @end
 %%--------------------------------------------------------------------
--spec filter(flow(), fun()) -> digraph:vertex().
-filter({flow,G, _},Fun) when is_function(Fun) ->
-  digraph:add_vertex(G, { filter, fn, Fun }).
+-spec filter(flow(), fun()) -> operator().
+filter({flow, _},Fun) when is_function(Fun) ->
+  {filter, fn, Fun}.
+  
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Define a filter oepration given a Module, Fun and Arguments
 %% @end
 %%--------------------------------------------------------------------
--spec filter(flow(), atom(), atom(), list()) -> digraph:vertex().
-filter({flow,G, _}, M,F,A) when is_atom(M) and is_atom(F) and is_list(A) ->
-  digraph:add_vertex(G, { filter, mfa, M, F, A }).
+-spec filter(flow(), atom(), atom(), list()) -> operator().
+filter({flow, _}, M,F,A) when is_atom(M) and is_atom(F) and is_list(A) ->
+  {filter, mfa, M, F, A}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Define a transform operation given a function returning a function
 %% @end
 %%--------------------------------------------------------------------
--spec transform(flow(), fun()) -> digraph:vertex().
-transform({flow,G, _},Fun) when is_function(Fun) ->
-  digraph:add_vertex(G, { transform, fn, Fun }).
+-spec transform(flow(), fun()) -> operator().
+transform({flow, _},Fun) when is_function(Fun) ->
+  {transform, fn, Fun }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,9 +94,9 @@ transform({flow,G, _},Fun) when is_function(Fun) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec transform(flow(), atom(), atom(), list()) -> digraph:vertex().
-transform({flow,G, _}, M,F,A) when is_atom(M) and is_atom(F) and is_list(A) ->
-  digraph:add_vertex(G, { transform, mfa, M, F, A }).
+-spec transform(flow(), atom(), atom(), list()) -> operator().
+transform({flow, _}, M,F,A) when is_atom(M) and is_atom(F) and is_list(A) ->
+   { transform, mfa, M, F, A }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -100,8 +104,8 @@ transform({flow,G, _}, M,F,A) when is_atom(M) and is_atom(F) and is_list(A) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec branch(flow(), atom(), atom(), list()) -> flow().
-branch({flow,G,Net}, From, As, Pipe) when is_list(Pipe) ->
-  Flow = branch({flow,G,Net}, From, As),
+branch({flow,Net}, From, As, Pipe) when is_list(Pipe) ->
+  Flow = branch({flow,Net}, From, As),
   pipe(Flow, As, Pipe).
 
 %%--------------------------------------------------------------------
@@ -110,18 +114,18 @@ branch({flow,G,Net}, From, As, Pipe) when is_list(Pipe) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec branch(flow(), atom(), atom()) -> flow().
-branch({flow,G,Net}, From, As) ->
+branch({flow,Net}, From, As) ->
   Root = dict:fetch(From,Net),
   case erlang:element(1,Root) of
     path ->  
       {path,Path} = Root,
       {branch, Flow} = Last = lists:last(Path),
       NewPath = lists:append(lists:delete(Last,Path),[{branch, Flow ++ [As]}]),
-      {flow,G,dict:store(From,{path,NewPath},Net)};
+      {flow,dict:store(From,{path,NewPath},Net)};
     pipe ->
       {pipe,Path} = Root,
       NewPath = lists:append(Path,[{branch,[As]}]),
-      {flow,G,dict:store(From, {path,NewPath},Net)}
+      {flow,dict:store(From, {path,NewPath},Net)}
   end.
 
 %%--------------------------------------------------------------------
@@ -130,9 +134,9 @@ branch({flow,G,Net}, From, As) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec combine(flow(), atom(), atom(), list()) -> flow().
-combine({flow,G,Net}, Label, From, Pipe) ->
-  Flow = branch({flow,G,Net}, From, Label),
-  Filter = filter({flow,G,Net}, fun(X) -> drop =/= X end),
+combine({flow,Net}, Label, From, Pipe) ->
+  Flow = branch({flow,Net}, From, Label),
+  Filter = filter({flow,Net}, fun(X) -> drop =/= X end),
   pipe(Flow, Label, lists:append([Filter], Pipe)).
 
 %%--------------------------------------------------------------------
@@ -141,15 +145,13 @@ combine({flow,G,Net}, Label, From, Pipe) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec pipe(flow(), atom(), list()) -> flow().
-pipe({flow,G,Net}, Label, List) ->
+pipe({flow,Net}, Label, List) ->
   [H|T] = List,
   case erlang:length(T) of
     0 ->
-      {flow,G,dict:store(Label,{pipe,[H]},Net)};
+      {flow,dict:store(Label,{pipe,[H]},Net)};
     _ ->
-      L = lists:last(T),
-      chain(fun(P,N) -> digraph:add_edge(G,P,N) end, List),
-      {flow,G,dict:store(Label,{pipe,digraph:get_path(G,H,L)},Net)}
+      {flow,dict:store(Label,{pipe,List},Net)}
   end.
 
 %%--------------------------------------------------------------------
@@ -161,62 +163,45 @@ pipe({flow,G,Net}, Label, List) ->
 %%--------------------------------------------------------------------
 -spec push(flow(), atom(), any()) -> any().
 push(Stream, Label, Data) when is_atom(Label) ->
-  {flow, Graph, Net} = Stream,
-  push1(Graph, Net, dict:fetch(Label, Net), Data).
+  {flow, Net} = Stream,
+  push1(Net, dict:fetch(Label, Net), Data).
 
--spec push1(digraph(), dict(), push_internal(), any()) -> any().
-push1(Graph, Net, {path,Path}, Data) when is_list(Path) ->
+-spec push1(dict(), push_internal(), any()) -> any().
+push1(Net, {path,Path}, Data) when is_list(Path) ->
   Last = lists:last(Path),
   case erlang:element(1,Last) of
     branch -> 
       {branch, Flow} = Last,
-      A = push1(Graph, Net, {pipe,lists:sublist(Path,erlang:length(Path)-1)},Data),
-      [ push1(Graph, Net, {branch, Branch}, A) || Branch <- Flow ],
+      A = push1(Net, {pipe,lists:sublist(Path,erlang:length(Path)-1)},Data),
+      [ push1(Net, {branch, Branch}, A) || Branch <- Flow ],
       branch;
-    _ -> push1(Graph, Net, {pipe,Path}, Data)
+    _ -> push1(Net, {pipe,Path}, Data)
   end;
-push1(Graph, Net, {branch,Branch}, Data) ->
-  push({flow, Graph, Net}, Branch, Data);
-push1(_Graph, _Net, {pipe,[]}, Data) -> Data;
-push1(Graph, Net, {pipe,Flow}, Data) when is_list(Flow) ->
+push1(Net, {branch,Branch}, Data) ->
+  push({flow, Net}, Branch, Data);
+push1(_Net, {pipe,[]}, Data) -> Data;
+push1(Net, {pipe,Flow}, Data) when is_list(Flow) ->
   [This|That] = Flow,
   case This of
     { transform, mfa, M, F, A } ->
       R = erlang:apply(M,F,infill(A,Data)),
-      push1(Graph, Net, {pipe,That}, R);
+      push1(Net, {pipe,That}, R);
     { transform, fn, Fun } ->
       R = Fun(Data),
-      push1(Graph, Net, {pipe,That}, R);
+      push1(Net, {pipe,That}, R);
     { filter, mfa, M, F, A } ->
       X = erlang:apply(M,F,infill(A,Data)),
       case X of
-        true -> push1(Graph, Net, {pipe,That}, Data);
+        true -> push1(Net, {pipe,That}, Data);
         _ -> drop
       end;
     { filter, fn, Fun } ->
       X = Fun(Data),
       case X of
-        true -> push1(Graph, Net, {pipe,That}, Data);
+        true -> push1(Net, {pipe,That}, Data);
         _ -> drop
       end
   end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Connect an ordered list of things together, pair by pair.
-%% Given a function of the form fun(L,R) and a list this function
-%% will call the function with a preceeding and subsequent element
-%% in the list, for all elements in the list.
-%%
-%% This allows setting up a chain of invocations so that the results
-%% of a prior function invocation can be offered as arguments to the
-%% next function in a pipeline. See uses in this class for usage.
-%% @end
-%%--------------------------------------------------------------------
--spec chain(fun(),list()) -> [any()].
-chain(_Fn, [])       -> [];
-chain(_Fn, [_])      -> [];
-chain(Fun, [X, Y|T]) -> [Fun(X, Y) | chain(Fun,[Y|T])].
 
 %%--------------------------------------------------------------------
 %% @doc

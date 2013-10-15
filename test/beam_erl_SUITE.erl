@@ -19,7 +19,6 @@
 %% test cases
 -export([
            t_infill_basic/1
-         , t_chain_basic/1
          , t_push_basic/1
          , t_filter_pipe_push/1
          , t_transform_pipe_push/1
@@ -72,7 +71,6 @@ groups() ->
     [
      {beam_erl, [], [
                       t_infill_basic
-                    , t_chain_basic
                     , t_push_basic
                     , t_filter_pipe_push
                     , t_transform_pipe_push
@@ -117,12 +115,6 @@ t_infill_basic(_Config) ->
     [] = beam_flow:infill([], boop),
     [boop] = beam_flow:infill([in], boop),
     [boop, beep, boop] = beam_flow:infill([in, beep, in], boop).
-
-t_chain_basic(_Config) ->
-    [] = beam_flow:chain(fun(_,_) -> ok end, []),
-    [] = beam_flow:chain(fun(_,_) -> ok end, [beep]),
-    [{beep, boop}] = beam_flow:chain(fun(C,P) -> {P, C} end, [boop, beep]),
-    [{bo,be},{be,bo}] = beam_flow:chain(fun(C,P) -> {P, C} end, [be,bo,be]).
 
 t_push_basic(_Config) ->
     Flow = beam_flow:new(),
