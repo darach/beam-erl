@@ -12,7 +12,7 @@
 %% API
 -export([all/0,
          suite/0,
-		 init_per_suite/1,
+         init_per_suite/1,
          groups/0
         ]).
 
@@ -25,33 +25,33 @@
          , t_transform_pipe_push/1
         ]).
 -export([
-		 t_eq/1
-		 , t_neq/1
-		 , t_lte/1
-		 , t_lt/1
-		 , t_gt/1
-		 , t_gte/1
-		 , t_seq/1
-		 , t_sne/1
-		 , t_uplus/1
-		 , t_uminus/1
-		 , t_plus/1
-		 , t_minus/1
-		 , t_mul/1
-		 , t_fdiv/1
-		 , t_idiv/1
-		 , t_irem/1
-		 , t_ibnot/1
-		 , t_iband/1
-		 , t_ibor/1
-		 , t_ibxor/1
-		 , t_ibsl/1
-		 , t_ibsr/1
-		 , t_bonot/1
-		 , t_boand/1
-		 , t_boor/1
-		 , t_boxor/1
-		]).
+	       t_eq/1
+	     , t_neq/1
+	     , t_lte/1
+	     , t_lt/1
+	     , t_gt/1
+	     , t_gte/1
+	     , t_seq/1
+	     , t_sne/1
+	     , t_uplus/1
+	     , t_uminus/1
+	     , t_plus/1
+	     , t_minus/1
+	     , t_mul/1
+	     , t_fdiv/1
+	     , t_idiv/1
+	     , t_irem/1
+	     , t_ibnot/1
+	     , t_iband/1
+	     , t_ibor/1
+	     , t_ibxor/1
+	     , t_ibsl/1
+	     , t_ibsr/1
+	     , t_bonot/1
+	     , t_boand/1
+	     , t_boor/1
+	     , t_boxor/1
+	    ]).
 
 %% we have warn_unused_import + warnings_as_errors -> bad time without PROPER_NO_IMPORTS
 %-define(PROPER_NO_IMPORTS, true).
@@ -62,9 +62,9 @@
 %-define(PROPTEST(M,F), true = proper:quickcheck(M:F())).
 
 all() -> [
-		  {group, beam_erl},
-		  {group, beam_bifs} 
-		 ].
+	      {group, beam_erl},
+	      {group, beam_bifs} 
+	     ].
 
 suite() -> [{ct_hooks,[cth_surefire]}, {timetrap, {seconds, 30}}].
 
@@ -78,33 +78,33 @@ groups() ->
                     , t_transform_pipe_push
                     ]},
 	 {beam_bifs, [], [
-					   t_eq
-					 , t_neq
-					 , t_lte
-					 , t_lt
-					 , t_gt
-					 , t_gte
-					 , t_seq
-					 , t_sne
-					 , t_uplus
-					 , t_uminus
-					 , t_plus
-					 , t_minus
-					 , t_mul
-					 , t_fdiv
-					 , t_idiv
-					 , t_irem
-					 , t_ibnot
-					 , t_iband
-					 , t_ibor
-					 , t_ibxor
-					 , t_ibsl
-					 , t_ibsr
-					 , t_bonot
-					 , t_boand
-					 , t_boor
-					 , t_boxor
-					 ]}
+	                   t_eq
+	                 , t_neq
+	                 , t_lte
+	                 , t_lt
+	                 , t_gt
+	                 , t_gte
+	                 , t_seq
+	                 , t_sne
+	                 , t_uplus
+	                 , t_uminus
+	                 , t_plus
+	                 , t_minus
+	                 , t_mul
+	                 , t_fdiv
+	                 , t_idiv
+	                 , t_irem
+	                 , t_ibnot
+	                 , t_iband
+	                 , t_ibor
+	                 , t_ibxor
+	                 , t_ibsl
+	                 , t_ibsr
+	                 , t_bonot
+	                 , t_boand
+	                 , t_boor
+	                 , t_boxor
+	                 ]}
     ].
 
 init_per_suite(Config) ->
