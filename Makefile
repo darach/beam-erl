@@ -8,12 +8,11 @@ erl:
 	$(REBAR) get-deps compile
 
 test: all
-	@mkdir -p .eunit
-	$(REBAR) skip_deps=true eunit
+	$(REBAR) skip_deps=true compile ct
 
 clean:
 	$(REBAR) clean
-	-rm -rvf deps ebin doc .eunit
+	-rm -rvf deps ebin doc
 
 dialyzer:
 	@dialyzer  src/beam_flow.erl src/beam_bifs.erl
