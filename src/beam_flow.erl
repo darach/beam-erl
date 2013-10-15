@@ -40,12 +40,8 @@
 -export([push/3]).
 
 %% internal
-%-export([chain/2]).
-%-export([infill/2]).
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
+-export([chain/2]).
+-export([infill/2]).
 
 -type flow() :: { flow, digraph(), dict()}.
 -type push_internal() :: {branch | pipe | path, list() | []}.
@@ -218,16 +214,9 @@ push1(Graph, Net, {pipe,Flow}, Data) when is_list(Flow) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chain(fun(),list()) -> [any()].
-chain(_Fun, []) ->
-  [];
-chain(_Fun, L) when erlang:length(L) =:= 1 ->
-  [];
-chain(Fun, L) when erlang:length(L) =:= 2 ->
-  [H,T] = L,
-  [Fun(H,T)];
-chain(Fun, L) when erlang:length(L) > 2 ->
-  [H|T] = L,
-  [Fun(H,erlang:hd(T))] ++ chain(Fun,T).
+chain(_Fn, [])       -> [];
+chain(_Fn, [_])      -> [];
+chain(Fun, [X, Y|T]) -> [Fun(X, Y) | chain(Fun,[Y|T])].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -235,41 +224,4 @@ chain(Fun, L) when erlang:length(L) > 2 ->
 %% @end
 %%--------------------------------------------------------------------
 -spec infill([any()],any()) -> [any()].
-infill([], _) -> [];
-infill([in|T], V) -> lists:append([V],infill(T,V));
-infill([H|T], V) -> lists:append([H],infill(T,V)).
-
--ifdef(TEST).
-
-basic_test() ->
-  ?assertEqual([], infill([], boop)),
-  ?assertEqual([boop], infill([in], boop)),
-  ?assertEqual([boop,beep,boop], infill([in,beep,in], boop)),
-
-  ?assertEqual([], chain(fun(_,_) -> ok end, [])),
-  ?assertEqual([], chain(fun(_,_) -> ok end, [beep])),
-  ?assertEqual([{beep,boop}], chain(fun(C,P) -> {P,C} end, [boop,beep])),
-  ?assertEqual([{bo,be},{be,bo}], chain(fun(C,P) -> {P,C} end, [be,bo,be])),
-
-  Flow = new(),
-  IsInt = filter(Flow, erlang, is_integer, [in]),
-  FlowInt = pipe(Flow, in, [IsInt]),
-  ?assertEqual(2, push(FlowInt,in,2)),
-  ?assertEqual(drop, push(FlowInt,in,beep)),
-
-  Listify = transform(Flow, erlang, atom_to_list, [in]),
-  FlowListify = pipe(Flow, in, [Listify]),
-  ?assertEqual("beep", push(FlowListify, in, beep)),
-
-  A0 = transform(Flow, erlang, list_to_atom, [in]),
-  A1 = filter(Flow, fun(X) -> ?assertEqual(beep, X), false end),
-  A2 = transform(Flow, fun(X) -> ?assertEqual(drop, X), ok end),
-  F0 = pipe(Flow, in, [ A0 ]),
-  F1 = branch(F0, in, b1, [ A1 ]),
-  F2 = branch(F1, in, b2, [ A1 ]),
-  F3 = combine(F2, union, b1, []),
-  F4 = combine(F3, union, b2, []),
-  F5 = pipe(F4, union, [ A2 ]),
-  ?assertEqual(branch, push(F5, in, "beep")).
-  
--endif.
+infill(L, V) -> lists:map(fun(in) -> V; (X) -> X end, L).
