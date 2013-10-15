@@ -1,19 +1,45 @@
-%%%-------------------------------------------------------------------
-%%% @author Michael Coles < michael dot coles at gmail dot com >
-%%% @copyright (C) 2013, Michael Coles
-%%% @doc
-%%%
-%%% @end
-%%% Created : 2013-10-14 14:14:55.186464
-%%%-------------------------------------------------------------------
+%% -------------------------------------------------------------------
+%% Permission is hereby granted, free of charge, to any person obtaining a
+%% copy of this software and associated documentation files (the
+%% "Software"), to deal in the Software without restriction, including
+%% without limitation the rights to use, copy, modify, merge, publish,
+%% distribute, sublicense, and/or sell copies of the Software, and to permit
+%% persons to whom the Software is furnished to do so, subject to the
+%% following conditions:
+%% 
+%% The above copyright notice and this permission notice shall be included
+%% in all copies or substantial portions of the Software.
+%% 
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+%% OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+%% MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+%% NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+%% DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+%% OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+%% USE OR OTHER DEALINGS IN THE SOFTWARE.
+%% -------------------------------------------------------------------
+%%  @author Michael Coles < michael dot coles at gmail dot com >
+%%  @author Darach Ennis <darach.ennis@gmail.com>
+%%  @copyright (C) 2013, Michael Coles, Darach Ennis
+%%  @doc
+%% 
+%%  @end
+%%  Created : 2013-10-14 14:14:55.186464
+%% -------------------------------------------------------------------
 -module(beam_erl_SUITE).
-
 
 %% API
 -export([all/0,
          suite/0,
          init_per_suite/1,
          groups/0
+        ]).
+
+%% samples
+-export([
+          t_sample_usage/1
+        , t_sample_branch/1
+        , t_sample_union/1
         ]).
 
 %% test cases
@@ -69,6 +95,11 @@ suite() -> [{ct_hooks,[cth_surefire]}, {timetrap, {seconds, 30}}].
 
 groups() ->
     [
+     {samples, [], [
+                      t_sample_usage
+                    , t_sample_branch
+                    , t_sample_union
+                    ]},
      {beam_erl, [], [
                       t_infill_basic
                     , t_push_basic
@@ -107,6 +138,67 @@ groups() ->
 
 init_per_suite(Config) ->
     [{new_flow, beam_flow:new()} | Config].
+
+%%%===================================================================
+%%% Samples
+%%%===================================================================
+
+t_sample_usage(_Config) ->
+    Empty = beam_flow:new(),
+    IsEven = beam_flow:filter(Empty, fun(X) -> X rem 2 == 0 end),
+    Square = beam_flow:transform(Empty, fun(X) -> X * X end),
+    %% configure a simple stream
+    %% - create a named pipeline, squaring all even events
+    Stream = beam_flow:pipe(Empty, source, [IsEven, Square]),
+    %% push events into the stream, even numbers get squared
+    4 = beam_flow:push(Stream, source, 2),
+    16 = beam_flow:push(Stream, source, 4),
+    %% odd numbers get dropped
+    drop = beam_flow:push(Stream, source, 3),
+    drop = beam_flow:push(Stream, source, 9).
+
+t_sample_branch(_Config) ->
+    Empty = beam_flow:new(),
+    IsEven = beam_flow:filter(Empty, fun(X) -> X rem 2 == 0 end),
+    IsOdd = beam_flow:filter(Empty, fun(X) -> X rem 2 == 1 end),
+    Sink1 = beam_flow:filter(Empty,
+      fun(X) -> % evens
+         0 = X rem 2
+      end),
+    Sink2 = beam_flow:filter(Empty,
+      fun(X) -> % odds
+         1 = X rem 2
+      end),
+    %% configure a simple stream
+    %% - create a named pipeline, squaring all even events
+    S0 = beam_flow:pipe(Empty, source, []),
+    S1 = beam_flow:branch(S0, source, evens, [IsEven, Sink1]),
+    S2 = beam_flow:branch(S1, source, odds, [IsOdd, Sink2]), 
+    %% push events into the stream, even numbers get squared
+    branch = beam_flow:push(S2, source, 2),
+    branch = beam_flow:push(S2, source, 4),
+    %% odd numbers get dropped
+    branch = beam_flow:push(S2, source, 3),
+    branch = beam_flow:push(S2, source, 9).
+
+t_sample_union(_Config) ->
+    Empty = beam_flow:new(),
+    Union = beam_flow:filter(Empty,
+      fun(X) ->
+         true = erlang:is_number(X)
+      end),
+    %% configure a simple stream
+    %% - create a named pipeline, squaring all even events
+    S0 = beam_flow:pipe(Empty, source1, []),
+    S1 = beam_flow:pipe(Empty, source2, []),
+    S2 = beam_flow:pipe(S1, union, [Union]),
+    S3 = beam_flow:combine(S2, union, source1, []),
+    S4 = beam_flow:combine(S3, union, source1, []),
+    branch = beam_flow:push(S4, source1, 1),
+    branch = beam_flow:push(S4, source2, 2),
+    branch = beam_flow:push(S4, source1, 3),
+    branch = beam_flow:push(S4, source2, 4),
+    ok.
 
 %%%===================================================================
 %%% Individual Test Cases (from groups() definition)
