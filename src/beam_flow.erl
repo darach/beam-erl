@@ -40,8 +40,8 @@
 -export([push/3]).
 
 %% internal
-%-export([chain/2]).
-%-export([infill/2]).
+-export([chain/2]).
+-export([infill/2]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -218,16 +218,9 @@ push1(Graph, Net, {pipe,Flow}, Data) when is_list(Flow) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec chain(fun(),list()) -> [any()].
-chain(_Fun, []) ->
-  [];
-chain(_Fun, L) when erlang:length(L) =:= 1 ->
-  [];
-chain(Fun, L) when erlang:length(L) =:= 2 ->
-  [H,T] = L,
-  [Fun(H,T)];
-chain(Fun, L) when erlang:length(L) > 2 ->
-  [H|T] = L,
-  [Fun(H,erlang:hd(T))] ++ chain(Fun,T).
+chain(_Fn, [])       -> [];
+chain(_Fn, [_])      -> [];
+chain(Fun, [X, Y|T]) -> [Fun(X, Y) | chain(Fun,[Y|T])].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -235,9 +228,7 @@ chain(Fun, L) when erlang:length(L) > 2 ->
 %% @end
 %%--------------------------------------------------------------------
 -spec infill([any()],any()) -> [any()].
-infill([], _) -> [];
-infill([in|T], V) -> lists:append([V],infill(T,V));
-infill([H|T], V) -> lists:append([H],infill(T,V)).
+infill(L, V) -> lists:map(fun(in) -> V; (X) -> X end, L).
 
 -ifdef(TEST).
 

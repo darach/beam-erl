@@ -9,7 +9,7 @@ erl:
 
 test: all
 	@mkdir -p .eunit
-	$(REBAR) skip_deps=true eunit
+	$(REBAR) skip_deps=true compile ct eunit
 
 clean:
 	$(REBAR) clean
