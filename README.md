@@ -1,4 +1,4 @@
-# **beam-erl**
+# **beam-erl** [![Build Status](https://travis-ci.org/darach/beam-erl.png)](https://travis-ci.org/darach/beam-erl)
 
 > Flow control library for embedded event processing
 
