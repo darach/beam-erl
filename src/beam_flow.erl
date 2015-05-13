@@ -146,13 +146,7 @@ combine({flow,Net}, Label, From, Pipe) ->
 %%--------------------------------------------------------------------
 -spec pipe(flow(), atom(), list()) -> flow().
 pipe({flow,Net}, Label, List) ->
-  [H|T] = List,
-  case erlang:length(T) of
-    0 ->
-      {flow,dict:store(Label,{pipe,[H]},Net)};
-    _ ->
-      {flow,dict:store(Label,{pipe,List},Net)}
-  end.
+  {flow,dict:store(Label,{pipe,List},Net)}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -182,20 +176,28 @@ push1(Net, {branch,Branch}, Data) ->
 push1(_Net, {pipe,[]}, Data) -> Data;
 push1(Net, {pipe,Flow}, Data) when is_list(Flow) ->
   [This|That] = Flow,
-  case This of
-    { transform, mfa, M, F, A } ->
+  case {This, Data} of
+    {{ transform, mfa, _M, _F, _A }, drop} ->
+      push1(Net, {pipe,That}, drop);
+    {{ transform, mfa, M, F, A }, _} ->
       R = erlang:apply(M,F,infill(A,Data)),
       push1(Net, {pipe,That}, R);
-    { transform, fn, Fun } ->
+    {{ transform, fn, _Fun }, drop} ->
+      push1(Net, {pipe,That}, drop);
+    {{ transform, fn, Fun }, _} ->
       R = Fun(Data),
       push1(Net, {pipe,That}, R);
-    { filter, mfa, M, F, A } ->
+    {{ filter, mfa, _M, _F, _A }, drop} ->
+      drop;
+    {{ filter, mfa, M, F, A }, _} ->
       X = erlang:apply(M,F,infill(A,Data)),
       case X of
         true -> push1(Net, {pipe,That}, Data);
         _ -> drop
       end;
-    { filter, fn, Fun } ->
+    {{ filter, fn, _Fun }, drop} ->
+      drop;
+    {{ filter, fn, Fun }, _} ->
       X = Fun(Data),
       case X of
         true -> push1(Net, {pipe,That}, Data);

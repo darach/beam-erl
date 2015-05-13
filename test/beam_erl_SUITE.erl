@@ -48,6 +48,7 @@
          , t_push_basic/1
          , t_filter_pipe_push/1
          , t_transform_pipe_push/1
+         , t_drop_ignore/1
         ]).
 -export([
            t_eq/1
@@ -87,6 +88,7 @@
 %-define(PROPTEST(M,F), true = proper:quickcheck(M:F())).
 
 all() -> [
+          {group, samples},
           {group, beam_erl},
           {group, beam_bifs} 
          ].
@@ -105,6 +107,7 @@ groups() ->
                     , t_push_basic
                     , t_filter_pipe_push
                     , t_transform_pipe_push
+                    , t_drop_ignore
                     ]},
      {beam_bifs, [], [
                        t_eq
@@ -190,10 +193,10 @@ t_sample_union(_Config) ->
     %% configure a simple stream
     %% - create a named pipeline, squaring all even events
     S0 = beam_flow:pipe(Empty, source1, []),
-    S1 = beam_flow:pipe(Empty, source2, []),
+    S1 = beam_flow:pipe(S0, source2, []),
     S2 = beam_flow:pipe(S1, union, [Union]),
     S3 = beam_flow:combine(S2, union, source1, []),
-    S4 = beam_flow:combine(S3, union, source1, []),
+    S4 = beam_flow:combine(S3, union, source2, []),
     branch = beam_flow:push(S4, source1, 1),
     branch = beam_flow:push(S4, source2, 2),
     branch = beam_flow:push(S4, source1, 3),
@@ -473,3 +476,35 @@ t_boxor(_Config) ->
     FlowBoxor = beam_flow:pipe(beam_flow:new(), in, [Boxor]),
     false = beam_flow:push(FlowBoxor, in, true),
     true = beam_flow:push(FlowBoxor, in, false).
+
+t_drop_ignore(_Config) ->
+
+    F = beam_flow:new(),
+
+    Audit = spawn(fun audit_loop/0),
+    Block1 = beam_flow:filter(F, fun(X) -> Audit ! {add, {block1, X}}, false end),
+    Block2 = beam_flow:filter(F, fun(X) -> Audit ! {add, {block2, X}}, false end),
+    Passthru1 = beam_flow:transform(F, fun(X) -> Audit ! {add, {passthru1, X}}, X end),
+    Passthru2 = beam_flow:transform(F, fun(X) -> Audit ! {add, {passthru2, X}}, X end),
+    Passthru3 = beam_flow:transform(F, fun(X) -> Audit ! {add, {passthru3, X}}, X end),
+    F2 = beam_flow:pipe(F, source, [Block1, Passthru1]),
+    F3 = beam_flow:branch(F2, source, next, [Passthru2, Block2]),
+    F4 = beam_flow:branch(F3, next, one_after, [Passthru3]),
+    beam_flow:push(F4, source, a),
+
+    % validate
+    Audit ! {get, self()},
+    Audited = receive {audit, Ops2} -> Ops2 after 1000 -> throw(timeout) end,
+    [{block1,a}] = Audited.
+
+audit_loop() -> audit_loop([]).
+audit_loop(OpsSoFar) ->
+    receive
+        close ->
+            die;
+        {add, Op} ->
+            audit_loop(OpsSoFar ++ [Op]);
+        {get, Pid} ->
+            Pid ! {audit, OpsSoFar},
+            audit_loop(OpsSoFar)
+    end.
