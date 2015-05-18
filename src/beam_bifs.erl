@@ -26,265 +26,265 @@
 -module(beam_bifs).
 
 %% comparisons
--export([eq/2]).
--export([neq/2]).
--export([lte/2]).
--export([lt/2]).
--export([gt/2]).
--export([gte/2]).
--export([seq/2]).
--export([sne/2]).
+-export([eq/1]).
+-export([neq/1]).
+-export([lte/1]).
+-export([lt/1]).
+-export([gt/1]).
+-export([gte/1]).
+-export([seq/1]).
+-export([sne/1]).
 %% arithmetics
--export([uplus/1]).
--export([uminus/1]).
--export([plus/2]).
--export([minus/2]).
--export([mul/2]).
--export([fdiv/2]).
--export([idiv/2]).
--export([irem/2]).
+-export([uplus/0]).
+-export([uminus/0]).
+-export([plus/1]).
+-export([minus/1]).
+-export([mul/1]).
+-export([fdiv/1]).
+-export([idiv/1]).
+-export([irem/1]).
 %% bitwise
--export([ibnot/1]).
--export([iband/2]).
--export([ibor/2]).
--export([ibxor/2]).
--export([ibsl/2]).
--export([ibsr/2]).
+-export([ibnot/0]).
+-export([iband/1]).
+-export([ibor/1]).
+-export([ibxor/1]).
+-export([ibsl/1]).
+-export([ibsr/1]).
 %% boolean
--export([bonot/1]).
--export([boand/2]).
--export([boor/2]).
--export([boxor/2]).
+-export([bonot/0]).
+-export([boand/1]).
+-export([boor/1]).
+-export([boxor/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec eq(beam_flow:flow(), any()) -> beam_flow:operator().
-eq(Flow, Y) -> 
-  beam_flow:filter(Flow, fun(X) -> X == Y end).
+-spec eq(any()) -> beam_flow:operator().
+eq(Y) ->
+  beam_flow:filter(fun(X) -> X == Y end, eq).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value not equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec neq(beam_flow:flow(), any()) -> beam_flow:operator().
-neq(Flow, Y) ->
-  beam_flow:filter(Flow, fun(X) -> X /= Y end).
+-spec neq(any()) -> beam_flow:operator().
+neq(Y) ->
+  beam_flow:filter(fun(X) -> X /= Y end, neq).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value less than or equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec lte(beam_flow:flow(), any()) -> beam_flow:operator().
-lte(Flow, Y) ->
-  beam_flow:filter(Flow, fun(X) -> X =< Y end).
+-spec lte(any()) -> beam_flow:operator().
+lte(Y) ->
+  beam_flow:filter(fun(X) -> X =< Y end, lte).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value less than to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec lt(beam_flow:flow(), any()) -> beam_flow:operator().
-lt(Flow, Y) ->
-  beam_flow:filter(Flow, fun(X) -> X < Y end).
+-spec lt(any()) -> beam_flow:operator().
+lt(Y) ->
+  beam_flow:filter(fun(X) -> X < Y end, lt).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value greater than to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec gt(beam_flow:flow(), any()) -> beam_flow:operator().
-gt(Flow, Y) ->
-  beam_flow:filter(Flow, fun(X) -> X > Y end).
+-spec gt(any()) -> beam_flow:operator().
+gt(Y) ->
+  beam_flow:filter(fun(X) -> X > Y end, gt).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value greater than or equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec gte(beam_flow:flow(), any()) -> beam_flow:operator().
-gte(Flow, Y) ->
-  beam_flow:filter(Flow, fun(X) -> X >= Y end).
+-spec gte(any()) -> beam_flow:operator().
+gte(Y) ->
+  beam_flow:filter(fun(X) -> X >= Y end, gte).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value exactly equal to some a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec seq(beam_flow:flow(), any()) -> beam_flow:operator().
-seq(Flow, Y) ->
-  beam_flow:filter(Flow, fun(X) -> X =:= Y end).
+-spec seq(any()) -> beam_flow:operator().
+seq(Y) ->
+  beam_flow:filter(fun(X) -> X =:= Y end, seq).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Is the streaming value exactly not equal to some a priori known value
 %% @end
--spec sne(beam_flow:flow(), any()) -> beam_flow:operator().
-sne(Flow, Y) ->
-  beam_flow:filter(Flow, fun(X) -> X =/= Y end).
+-spec sne(any()) -> beam_flow:operator().
+sne(Y) ->
+  beam_flow:filter(fun(X) -> X =/= Y end, sne).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the unary plus of the streaming value
 %% @end
 %%--------------------------------------------------------------------
--spec uplus(beam_flow:flow()) -> beam_flow:operator().
-uplus(Flow) ->
-  beam_flow:transform(Flow, fun(X) -> X end).
+-spec uplus() -> beam_flow:operator().
+uplus() ->
+  beam_flow:transform(fun(X) -> X end, uplus).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emits the unary minus of the streaming value
 %% @end
 %%--------------------------------------------------------------------
--spec uminus(beam_flow:flow()) -> beam_flow:operator().
-uminus(Flow) ->
-  beam_flow:transform(Flow, fun(X) -> -X end).
+-spec uminus() -> beam_flow:operator().
+uminus() ->
+  beam_flow:transform(fun(X) -> -X end, uminus).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the addition of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec plus(beam_flow:flow(), number()) -> beam_flow:operator().
-plus(Flow, Y) ->
-  beam_flow:transform(Flow, fun(X) -> X + Y end).
+-spec plus(number()) -> beam_flow:operator().
+plus(Y) ->
+  beam_flow:transform(fun(X) -> X + Y end, plus).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the subtraction of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec minus(beam_flow:flow(), number()) -> beam_flow:operator().
-minus(Flow, Y) ->
-  beam_flow:transform(Flow, fun(X) -> X - Y end).
+-spec minus(number()) -> beam_flow:operator().
+minus(Y) ->
+  beam_flow:transform(fun(X) -> X - Y end, minus).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the multiplication of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec mul(beam_flow:flow(), number()) -> beam_flow:operator().
-mul(Flow, Y) ->
-  beam_flow:transform(Flow, fun(X) -> X * Y end).
+-spec mul(number()) -> beam_flow:operator().
+mul(Y) ->
+  beam_flow:transform(fun(X) -> X * Y end, mul).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the floating point division of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec fdiv(beam_flow:flow(), float()) -> beam_flow:operator().
-fdiv(Flow, Y) ->
-  beam_flow:transform(Flow, fun(X) -> X / Y end).
+-spec fdiv(float()) -> beam_flow:operator().
+fdiv(Y) ->
+  beam_flow:transform(fun(X) -> X / Y end, fdiv).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the integral division of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec idiv(beam_flow:flow(), integer()) -> beam_flow:operator().
-idiv(Flow, Y) ->
-  beam_flow:transform(Flow, fun(X) -> X div Y end).
+-spec idiv(integer()) -> beam_flow:operator().
+idiv(Y) ->
+  beam_flow:transform(fun(X) -> X div Y end, idiv).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the integral remainder of the streaming value to an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec irem(beam_flow:flow(), integer()) -> beam_flow:operator().
-irem(Flow, Y) ->
-  beam_flow:transform(Flow, fun(X) -> X rem Y end).
+-spec irem(integer()) -> beam_flow:operator().
+irem(Y) ->
+  beam_flow:transform(fun(X) -> X rem Y end, irem).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the binary not of the streaming value
 %% @end
 %%--------------------------------------------------------------------
--spec ibnot(beam_flow:flow()) -> beam_flow:operator().
-ibnot(Flow) ->
-  beam_flow:transform(Flow, fun(X) -> bnot X end).
+-spec ibnot() -> beam_flow:operator().
+ibnot() ->
+  beam_flow:transform(fun(X) -> bnot X end, ibnot).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the binary and of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec iband(beam_flow:flow(), integer()) -> beam_flow:operator().
-iband(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X band Y end).
+-spec iband(integer()) -> beam_flow:operator().
+iband(Y) ->
+  beam_flow:transform(fun(X) -> X band Y end, iband).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the binary or of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec ibor(beam_flow:flow(), integer()) -> beam_flow:operator().
-ibor(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X bor Y end).
+-spec ibor(integer()) -> beam_flow:operator().
+ibor(Y) ->
+  beam_flow:transform(fun(X) -> X bor Y end, ibor).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the binary xor of the streaming value and an a priori known vlaue
 %% @end
 %%--------------------------------------------------------------------
--spec ibxor(beam_flow:flow(), integer()) -> beam_flow:operator().
-ibxor(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X bxor Y end).
+-spec ibxor(integer()) -> beam_flow:operator().
+ibxor(Y) ->
+  beam_flow:transform(fun(X) -> X bxor Y end, ibxor).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the binary shift left of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec ibsl(beam_flow:flow(), integer()) -> beam_flow:operator().
-ibsl(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X bsl Y end).
+-spec ibsl(integer()) -> beam_flow:operator().
+ibsl(Y) ->
+  beam_flow:transform(fun(X) -> X bsl Y end, ibsl).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the binary shift right of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec ibsr(beam_flow:flow(), integer()) -> beam_flow:operator().
-ibsr(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X bsr Y end).
+-spec ibsr(integer()) -> beam_flow:operator().
+ibsr(Y) ->
+  beam_flow:transform(fun(X) -> X bsr Y end, ibsr).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the boolean not of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec bonot(beam_flow:flow()) -> beam_flow:operator().
-bonot(Flow) ->
-  beam_flow:transform(Flow, fun(X) -> not X end).
+-spec bonot() -> beam_flow:operator().
+bonot() ->
+  beam_flow:transform(fun(X) -> not X end, bonot).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the boolean and of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec boand(beam_flow:flow(), boolean()) -> beam_flow:operator().
-boand(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X and Y end).
+-spec boand(boolean()) -> beam_flow:operator().
+boand(Y) ->
+  beam_flow:transform(fun(X) -> X and Y end, boand).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the boolean or of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec boor(beam_flow:flow(), boolean()) -> beam_flow:operator().
-boor(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X or Y end).
+-spec boor(boolean()) -> beam_flow:operator().
+boor(Y) ->
+  beam_flow:transform(fun(X) -> X or Y end, boor).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Emit the boolean xor of the streaming value and an a priori known value
 %% @end
 %%--------------------------------------------------------------------
--spec boxor(beam_flow:flow(), boolean()) -> beam_flow:operator().
-boxor(Flow,Y) ->
-  beam_flow:transform(Flow, fun(X) -> X xor Y end).
+-spec boxor(boolean()) -> beam_flow:operator().
+boxor(Y) ->
+  beam_flow:transform(fun(X) -> X xor Y end, boxor).
