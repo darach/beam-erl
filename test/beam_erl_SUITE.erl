@@ -52,8 +52,13 @@ groups() ->
                     , t_push_basic
                     , t_filter_pipe_push
                     , t_transform_pipe_push
-                    , t_ctx_propagation
-                    , t_audit
+                    , t_audit_switch
+                    , t_ctx_audit_filter
+                    , t_ctx_audit_transform
+                    , t_ctx_audit_branch_combine
+                    , t_ctx_complex
+                    , t_audit_complex
+                    , depth_first
                     ]},
      {beam_bifs, [], [
                        t_eq
@@ -344,9 +349,50 @@ t_boxor(_Config) ->
     {{ok, true}, no_ctx} = beam_flow:push(FlowBoxor, in, false, no_ctx).
 
 %%--------------------------------------------------------------------
-%% context propagation
+%% context propagation & audit generation
 %%--------------------------------------------------------------------
-t_ctx_propagation(_Config) ->
+t_audit_switch(_Config) ->
+    Pass = beam_flow:transform(fun(X, Ctx) -> {X, Ctx} end, pass),
+    F = beam_flow:pipe(beam_flow:new(), source, [Pass]),
+    {{ok, a}, no_ctx} = beam_flow:push(F, source, a, no_ctx),
+    ExpAudit = [{transform,pass,{ctx,no_ctx},{in,a},{out,a}}],
+    {{ok, a}, no_ctx, ExpAudit} = beam_flow:push(F, source, a, no_ctx, true).
+
+t_ctx_audit_filter(_Config) ->
+    Filter = beam_flow:filter(fun(X, Ctx) -> X+Ctx<10 end, filter1),
+    F = beam_flow:pipe(beam_flow:new(), source, [Filter]),
+    % passes
+    ExpAudit1 = [{filter,filter1,{ctx,2},{in,3},{out,true}}],
+    {{ok, 3}, 2, ExpAudit1} = beam_flow:push(F, source, 3, 2, true),
+    % fails
+    ExpAudit2 = [{filter,filter1,{ctx,2},{in,10},{out,false}}],
+    {drop, 2, ExpAudit2} = beam_flow:push(F, source, 10, 2, true),
+    % fails again
+    ExpAudit3 = [{filter,filter1,{ctx,10},{in,2},{out,false}}],
+    {drop, 10, ExpAudit3} = beam_flow:push(F, source, 2, 10, true).
+
+t_ctx_audit_transform(_Config) ->
+    Transform = beam_flow:transform(fun(X, Ctx) -> {X+Ctx, X*Ctx} end, transform1),
+    F = beam_flow:pipe(beam_flow:new(), source, [Transform]),
+    ExpAudit = [{transform,transform1,{ctx,2},{in,3},{out,5}}],
+    {{ok, 5}, 6, ExpAudit} = beam_flow:push(F, source, 3, 2, true).
+
+t_ctx_audit_branch_combine(_Config) ->
+    Sink  = beam_flow:transform(fun(X, Ctx) -> {X, Ctx++[X]} end, sink),
+    F = beam_flow:pipe(beam_flow:new(), source, []),
+    F2 = beam_flow:branch(F, source, b1, []),
+    F3 = beam_flow:branch(F2, source, b2, []),
+    F4 = beam_flow:combine(F3, union, b1, [Sink]),
+    F5 = beam_flow:combine(F4, union, b2),
+    ExpAudit = [{transform,sink,{ctx,[]},{in,a},{out,a}},
+                {branch,union,{ctx,[]},{in,a},{out,a}},
+                {branch,b1,{ctx,[]},{in,a},{out,branch}},
+                {transform,sink,{ctx,[a]},{in,a},{out,a}},
+                {branch,union,{ctx,[a]},{in,a},{out,a}},
+                {branch,b2,{ctx,[a]},{in,a},{out,branch}}],
+    {branch, [a,a], ExpAudit} = beam_flow:push(F5, source, a, [], true).
+
+t_ctx_complex(_Config) ->
     Sink = fun(Var) -> beam_flow:transform(fun(X, Ctx) -> {X, dict:store(Var, X, Ctx)} end, {sink, Var}) end,
     Gt = fun(Const) -> beam_flow:filter(fun(X, _Ctx) -> X>Const end, {gt, Const}) end,
     GtVar = fun(Var) -> beam_flow:filter(fun(X, Ctx) -> X>dict:fetch(Var, Ctx) end, {gt_var, Var}) end,
@@ -368,10 +414,7 @@ t_ctx_propagation(_Config) ->
     ExpCtx3 = dict:from_list([{x, 10}, {y, 20}, {z, -99}, {a, 50}, {b, 50}, {c, 50}]),
     {branch, ExpCtx3} = beam_flow:push(F3, source, 50, InitCtx).
 
-%%--------------------------------------------------------------------
-%% audit generation
-%%--------------------------------------------------------------------
-t_audit(_Config) ->
+t_audit_complex(_Config) ->
     Noop = fun(Id) -> beam_flow:transform(fun(X, Ctx) -> {X, Ctx} end, {noop, Id}) end,
     Pass = fun(Id) -> beam_flow:filter(fun(_X, _Ctx) -> true end, {pass, Id}) end,
     F = beam_flow:pipe(beam_flow:new(), source, [Noop(a)]),
@@ -386,4 +429,85 @@ t_audit(_Config) ->
                 {filter,{pass,d},{ctx,no_ctx},{in,0},{out,true}},
                 {branch,one_after2,{ctx,no_ctx},{in,0},{out,0}},
                 {branch,next,{ctx,no_ctx},{in,0},{out,branch}}],
-    {branch, no_ctx, ExpAudit} = beam_flow:push_audit(F4, source, 0, no_ctx).
+    {branch, no_ctx, ExpAudit} = beam_flow:push(F4, source, 0, no_ctx, true).
+
+
+%%--------------------------------------------------------------------
+%% Branch and combine test, traversing the graph:
+%%
+%%          +- f(<10) ---- t(*10) ---+
+%%         /                          \
+%% source +-- f(<100) ---- t(*100) ----+ union -- t(sink)
+%%         \                          /
+%%          +- f(<1000) -- t(*1000) -+
+%%
+%% Where:
+%% f(<X) == filter for Event < X
+%% t(*X) == transform Event * X
+%% t(sink) == record Event in Ctx
+%%--------------------------------------------------------------------
+depth_first(_Config) ->
+    Gt    = fun(Y) -> beam_flow:filter(fun(X, _Ctx) -> X > Y end, {gt, Y}) end,
+    Times = fun(Y) -> beam_flow:transform(fun(X, Ctx) -> {X*Y, Ctx} end, {times, Y}) end,
+    Sink  = beam_flow:transform(fun(X, Ctx) -> {X, Ctx++[X]} end, sink),
+    F = beam_flow:pipe(beam_flow:new(), source, []),
+    F2 = beam_flow:branch(F,  source, b1, [Gt(10), Times(10)]),
+    F3 = beam_flow:branch(F2, source, b2, [Gt(100), Times(100)]),
+    F4 = beam_flow:branch(F3, source, b3, [Gt(1000), Times(1000)]),
+    F5 = beam_flow:combine(F4, union, b1, [Sink]),
+    F6 = beam_flow:combine(F5, union, b2),
+    F7 = beam_flow:combine(F6, union, b3),
+
+    ExpCtx1 = [],
+    ExpAudit1 = [{filter,{gt,10},{ctx,[]},{in,0},{out,false}},
+                 {branch,b1,{ctx,[]},{in,0},{out,drop}},
+                 {filter,{gt,100},{ctx,[]},{in,0},{out,false}},
+                 {branch,b2,{ctx,[]},{in,0},{out,drop}},
+                 {filter,{gt,1000},{ctx,[]},{in,0},{out,false}},
+                 {branch,b3,{ctx,[]},{in,0},{out,drop}}],
+    {branch, ExpCtx1, ExpAudit1} = beam_flow:push(F7, source, 0, [], true),
+
+    ExpCtx2 = [110],
+    ExpAudit2 = [{filter,{gt,10},{ctx,[]},{in,11},{out,true}},
+                 {transform,{times,10},{ctx,[]},{in,11},{out,110}},
+                 {transform,sink,{ctx,[]},{in,110},{out,110}},
+                 {branch,union,{ctx,[]},{in,110},{out,110}},
+                 {branch,b1,{ctx,[]},{in,11},{out,branch}},
+                 {filter,{gt,100},{ctx,[110]},{in,11},{out,false}},
+                 {branch,b2,{ctx,[110]},{in,11},{out,drop}},
+                 {filter,{gt,1000},{ctx,[110]},{in,11},{out,false}},
+                 {branch,b3,{ctx,[110]},{in,11},{out,drop}}],
+    {branch, ExpCtx2, ExpAudit2} = beam_flow:push(F7, source, 11, [], true),
+
+    ExpCtx3 = [1110, 11100],
+    ExpAudit3 = [{filter,{gt,10},{ctx,[]},{in,111},{out,true}},
+                 {transform,{times,10},{ctx,[]},{in,111},{out,1110}},
+                 {transform,sink,{ctx,[]},{in,1110},{out,1110}},
+                 {branch,union,{ctx,[]},{in,1110},{out,1110}},
+                 {branch,b1,{ctx,[]},{in,111},{out,branch}},
+                 {filter,{gt,100},{ctx,[1110]},{in,111},{out,true}},
+                 {transform,{times,100},{ctx,[1110]},{in,111},{out,11100}},
+                 {transform,sink,{ctx,[1110]},{in,11100},{out,11100}},
+                 {branch,union,{ctx,[1110]},{in,11100},{out,11100}},
+                 {branch,b2,{ctx,[1110]},{in,111},{out,branch}},
+                 {filter,{gt,1000},{ctx,[1110,11100]},{in,111},{out,false}},
+                 {branch,b3,{ctx,[1110,11100]},{in,111},{out,drop}}],
+    {branch, ExpCtx3, ExpAudit3} = beam_flow:push(F7, source, 111, [], true),
+
+    ExpCtx4 = [11110, 111100, 1111000],
+    ExpAudit4 = [{filter,{gt,10},{ctx,[]},{in,1111},{out,true}},
+                 {transform,{times,10},{ctx,[]},{in,1111},{out,11110}},
+                 {transform,sink,{ctx,[]},{in,11110},{out,11110}},
+                 {branch,union,{ctx,[]},{in,11110},{out,11110}},
+                 {branch,b1,{ctx,[]},{in,1111},{out,branch}},
+                 {filter,{gt,100},{ctx,[11110]},{in,1111},{out,true}},
+                 {transform,{times,100},{ctx,[11110]},{in,1111},{out,111100}},
+                 {transform,sink,{ctx,[11110]},{in,111100},{out,111100}},
+                 {branch,union,{ctx,[11110]},{in,111100},{out,111100}},
+                 {branch,b2,{ctx,[11110]},{in,1111},{out,branch}},
+                 {filter,{gt,1000},{ctx,[11110,111100]},{in,1111},{out,true}},
+                 {transform,{times,1000},{ctx,[11110,111100]},{in,1111},{out,1111000}},
+                 {transform,sink,{ctx,[11110,111100]},{in,1111000},{out,1111000}},
+                 {branch,union,{ctx,[11110,111100]},{in,1111000},{out,1111000}},
+                 {branch,b3,{ctx,[11110,111100]},{in,1111},{out,branch}}],
+    {branch, ExpCtx4, ExpAudit4} = beam_flow:push(F7, source, 1111, [], true).

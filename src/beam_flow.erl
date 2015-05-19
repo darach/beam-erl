@@ -33,12 +33,13 @@
 -export([transform/4]).
 -export([branch/3]).
 -export([branch/4]).
+-export([combine/3]).
 -export([combine/4]).
 -export([pipe/3]).
 
 %% runtime
 -export([push/4]).
--export([push_audit/4]).
+-export([push/5]).
 -export([net/1]).
 
 %% necessary to expose...?
@@ -148,13 +149,22 @@ branch({flow,_Net}=F, From, As, Pipe) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Combine, or union, a set of pipelines into an existing pipe
+%% @end
+%%--------------------------------------------------------------------
+-spec combine(flow(), label(), label()) -> flow().
+combine({flow,_Net}=F, Label, From) ->
+  branch(F, From, Label).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Combine, or union, a set of pipelines into a single one
 %% @end
 %%--------------------------------------------------------------------
 -spec combine(flow(), label(), label(), [ operator() ]) -> flow().
 combine({flow,_Net}=F, Label, From, Pipe) ->
   F2 = pipe(F, Label, Pipe),
-  branch(F2, From, Label).
+  combine(F2, Label, From).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -171,11 +181,12 @@ pipe({flow,Net}, Label, Pipe) ->
 %% Push Data into a stream identified by Label into a Flow.
 %% The data will stream through the flow producing effects
 %% as it is handled by a network of connected operators.
+%% Switch audit off
 %% @end
 %%--------------------------------------------------------------------
 -spec push(flow(), label(), data(), ctx()) -> {data(), ctx()}.
-push({flow,Net}, Label, Data, InitCtx) ->
-  {Res, Ctx, _Audit} = push1({flow,Net}, Label, Data, InitCtx, false),
+push({flow,_Net}=F, Label, Data, InitCtx) ->
+  {Res, Ctx, []} = push(F, Label, Data, InitCtx, false),
   {Res, Ctx}.
 
 %%--------------------------------------------------------------------
@@ -183,12 +194,18 @@ push({flow,Net}, Label, Data, InitCtx) ->
 %% Push Data into a stream identified by Label into a Flow.
 %% The data will stream through the flow producing effects
 %% as it is handled by a network of connected operators.
-%% Audit log will be returned together with the result.
+%% Optionally audit.
 %% @end
 %%--------------------------------------------------------------------
--spec push_audit(flow(), label(), data(), ctx()) -> {data(), ctx(), [audit()]}.
-push_audit({flow,Net}, Label, Data, InitCtx) ->
-  push1({flow,Net}, Label, Data, InitCtx, true).
+-spec push(flow(), label(), data(), ctx(), boolean()) -> {data(), ctx(), [audit()]}.
+push({flow,Net}, Label, Data, InitCtx, ShouldAudit) ->
+  case dict:find(Label, Net) of
+    {ok, Pipe} ->
+      BeamState = #beam_state{ctx=InitCtx, should_audit=ShouldAudit},
+      {Res, #beam_state{ctx=Ctx, audit=Audit}} = push2(Net, Pipe, Data, BeamState),
+      {Res, Ctx, Audit};
+    error -> throw({invalid_label, Label})
+  end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -199,15 +216,6 @@ push_audit({flow,Net}, Label, Data, InitCtx) ->
 net({flow, Net}) -> dict:to_list(Net).
 
 %% internals
-push1({flow,Net}, Label, Data, InitCtx, ShouldAudit) ->
-  case dict:find(Label, Net) of
-    {ok, Pipe} ->
-      BeamState = #beam_state{ctx=InitCtx, should_audit=ShouldAudit},
-      {Res, #beam_state{ctx=Ctx, audit=Audit}} = push2(Net, Pipe, Data, BeamState),
-      {Res, Ctx, Audit};
-    error -> throw({invalid_label, Label})
-  end.
-
 push2(_Net, [], Data, BeamState) ->
   {{ok, Data}, BeamState};
 push2(Net, [{filter, {fn, Fun}, _As}=Filter|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
