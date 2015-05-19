@@ -15,8 +15,10 @@ clean:
 	-rm -rvf deps ebin doc
 
 dialyzer:
-	@dialyzer  src/beam_flow.erl src/beam_bifs.erl
+	@dialyzer --verbose --plts .plt --src src -r ebin
 
 doc:
 	$(REBAR) doc
 
+build-plt:
+	@dialyzer --build_plt --output_plt .plt --apps kernel stdlib erts

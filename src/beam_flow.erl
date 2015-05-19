@@ -27,26 +27,39 @@
 
 %% flow construction
 -export([new/0]).
--export([filter/4]).
 -export([filter/2]).
--export([transform/4]).
+-export([filter/4]).
 -export([transform/2]).
--export([branch/4]).
+-export([transform/4]).
 -export([branch/3]).
+-export([branch/4]).
+-export([combine/3]).
 -export([combine/4]).
 -export([pipe/3]).
 
 %% runtime
--export([push/3]).
+-export([push/4]).
+-export([push/5]).
+-export([net/1]).
 
-%% internal
--export([infill/2]).
+%% necessary to expose...?
+-export([infill/3]).
 
--type flow() :: { flow, dict()}.
--type operator() :: 
-  {filter | transform, fn, fun() } |
-  {filter | transform, mfa, atom(), atom(), list()}.
--type push_internal() :: {branch | pipe | path, list() | []}.
+-record(beam_state, {
+    ctx :: any(),
+    should_audit = false :: boolean(),
+    audit = [] :: list()
+  }).
+
+-type flow()      :: { flow, dict() }.
+-type filter()    :: { filter, exec(), label() }.
+-type transform() :: { transform, exec(), label() }.
+-type operator()  :: filter() | transform().
+-type label()     :: any().
+-type data()      :: any().
+-type ctx()       :: any().
+-type audit()     :: { filter|transform|branch, label(), {ctx,ctx()}, {in,data()}, {out,data()}}.
+-type exec()      :: { fn, function() } | { mfa, module(), atom(), [data()] }.
 
 -export_type([flow/0]).
 -export_type([operator/0]).
@@ -65,150 +78,242 @@ new() ->
 %% Define a filter operation given a predicate (boolean returning) function
 %% @end
 %%--------------------------------------------------------------------
--spec filter(flow(), fun()) -> operator().
-filter({flow, _},Fun) when is_function(Fun) ->
-  {filter, fn, Fun}.
+-spec filter(function(), label()) -> filter().
+filter(Fun, As) when is_function(Fun) ->
+  {filter, maybe_ignore_ctx(filter, {fn, Fun}), As}.
   
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Define a filter oepration given a Module, Fun and Arguments
 %% @end
 %%--------------------------------------------------------------------
--spec filter(flow(), atom(), atom(), list()) -> operator().
-filter({flow, _}, M,F,A) when is_atom(M) and is_atom(F) and is_list(A) ->
-  {filter, mfa, M, F, A}.
+-spec filter(module(), atom(), [data()], label()) -> filter().
+filter(M,F,A, As) when is_atom(M), is_atom(F), is_list(A) ->
+  {filter, {mfa, M,F,A}, As}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Define a transform operation given a function returning a function
 %% @end
 %%--------------------------------------------------------------------
--spec transform(flow(), fun()) -> operator().
-transform({flow, _},Fun) when is_function(Fun) ->
-  {transform, fn, Fun }.
+-spec transform(function(), label()) -> transform().
+transform(Fun, As) when is_function(Fun) ->
+  {transform, maybe_ignore_ctx(transform, {fn, Fun}), As}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Define a transform operation given a Module, Fun and Arguments
 %% @end
 %%--------------------------------------------------------------------
-
--spec transform(flow(), atom(), atom(), list()) -> operator().
-transform({flow, _}, M,F,A) when is_atom(M) and is_atom(F) and is_list(A) ->
-   { transform, mfa, M, F, A }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Branch a flow into multiple sub flows
-%% @end
-%%--------------------------------------------------------------------
--spec branch(flow(), atom(), atom(), list()) -> flow().
-branch({flow,Net}, From, As, Pipe) when is_list(Pipe) ->
-  Flow = branch({flow,Net}, From, As),
-  pipe(Flow, As, Pipe).
+-spec transform(module(), atom(), [data()], label()) -> transform().
+transform(M,F,A, As) when is_atom(M), is_atom(F), is_list(A) ->
+  {transform, {mfa, M,F,A}, As}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Branch a flow into multiple sub flows
 %% @end
 %%--------------------------------------------------------------------
--spec branch(flow(), atom(), atom()) -> flow().
+-spec branch(flow(), label(), label()) -> flow().
 branch({flow,Net}, From, As) ->
-  Root = dict:fetch(From,Net),
-  case erlang:element(1,Root) of
-    path ->  
-      {path,Path} = Root,
-      {branch, Flow} = Last = lists:last(Path),
-      NewPath = lists:append(lists:delete(Last,Path),[{branch, Flow ++ [As]}]),
-      {flow,dict:store(From,{path,NewPath},Net)};
-    pipe ->
-      {pipe,Path} = Root,
-      NewPath = lists:append(Path,[{branch,[As]}]),
-      {flow,dict:store(From, {path,NewPath},Net)}
+  case dict:is_key(As, Net) of
+    true -> ok;
+    false -> throw({invalid_as_label, As})
+  end,
+  case dict:find(From, Net) of
+    {ok, FromPipe} ->
+      {FromPipeHeads, FromPipeLast} = heads_and_last(FromPipe),
+      FromPipe2 = case FromPipeLast of
+        {branch, Branches} ->
+          % add to existing branches
+          FromPipeHeads ++ [{branch, Branches++[As]}];
+        _ ->
+          % create new branch node
+          FromPipe ++ [{branch, [As]}]
+      end,
+      Net2 = dict:store(From, FromPipe2, Net),
+      {flow, Net2};
+    error ->
+      throw({invalid_from_label, From})
   end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Branch a flow into multiple sub flows
+%% @end
+%%--------------------------------------------------------------------
+-spec branch(flow(), label(), label(), [ operator() ]) -> flow().
+branch({flow,_Net}=F, From, As, Pipe) ->
+  F2 = pipe(F, As, Pipe),
+  branch(F2, From, As).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Combine, or union, a set of pipelines into an existing pipe
+%% @end
+%%--------------------------------------------------------------------
+-spec combine(flow(), label(), label()) -> flow().
+combine({flow,_Net}=F, Label, From) ->
+  branch(F, From, Label).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Combine, or union, a set of pipelines into a single one
 %% @end
 %%--------------------------------------------------------------------
--spec combine(flow(), atom(), atom(), list()) -> flow().
-combine({flow,Net}, Label, From, Pipe) ->
-  Flow = branch({flow,Net}, From, Label),
-  Filter = filter({flow,Net}, fun(X) -> drop =/= X end),
-  pipe(Flow, Label, lists:append([Filter], Pipe)).
+-spec combine(flow(), label(), label(), [ operator() ]) -> flow().
+combine({flow,_Net}=F, Label, From, Pipe) ->
+  F2 = pipe(F, Label, Pipe),
+  combine(F2, Label, From).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect a set of flow operations in a named pipeline
 %% @end
 %%--------------------------------------------------------------------
--spec pipe(flow(), atom(), list()) -> flow().
-pipe({flow,Net}, Label, List) ->
-  {flow,dict:store(Label,{pipe,List},Net)}.
+-spec pipe(flow(), label(), [ operator() ]) -> flow().
+pipe({flow,Net}, Label, Pipe) ->
+  Net2 = dict:store(Label, Pipe, Net),
+  {flow, Net2}.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Push Data into a stream identified by Label into a Flow.
 %% The data will stream through the flow producing effects
 %% as it is handled by a network of connected operators.
+%% Switch audit off
 %% @end
 %%--------------------------------------------------------------------
--spec push(flow(), atom(), any()) -> any().
-push(Stream, Label, Data) when is_atom(Label) ->
-  {flow, Net} = Stream,
-  push1(Net, dict:fetch(Label, Net), Data).
+-spec push(flow(), label(), data(), ctx()) -> {data(), ctx()}.
+push({flow,_Net}=F, Label, Data, InitCtx) ->
+  {Res, Ctx, []} = push(F, Label, Data, InitCtx, false),
+  {Res, Ctx}.
 
--spec push1(dict(), push_internal(), any()) -> any().
-push1(Net, {path,Path}, Data) when is_list(Path) ->
-  Last = lists:last(Path),
-  case erlang:element(1,Last) of
-    branch -> 
-      {branch, Flow} = Last,
-      A = push1(Net, {pipe,lists:sublist(Path,erlang:length(Path)-1)},Data),
-      [ push1(Net, {branch, Branch}, A) || Branch <- Flow ],
-      branch;
-    _ -> push1(Net, {pipe,Path}, Data)
-  end;
-push1(Net, {branch,Branch}, Data) ->
-  push({flow, Net}, Branch, Data);
-push1(_Net, {pipe,[]}, Data) -> Data;
-push1(Net, {pipe,Flow}, Data) when is_list(Flow) ->
-  [This|That] = Flow,
-  case {This, Data} of
-    {{ transform, mfa, _M, _F, _A }, drop} ->
-      push1(Net, {pipe,That}, drop);
-    {{ transform, mfa, M, F, A }, _} ->
-      R = erlang:apply(M,F,infill(A,Data)),
-      push1(Net, {pipe,That}, R);
-    {{ transform, fn, _Fun }, drop} ->
-      push1(Net, {pipe,That}, drop);
-    {{ transform, fn, Fun }, _} ->
-      R = Fun(Data),
-      push1(Net, {pipe,That}, R);
-    {{ filter, mfa, _M, _F, _A }, drop} ->
-      drop;
-    {{ filter, mfa, M, F, A }, _} ->
-      X = erlang:apply(M,F,infill(A,Data)),
-      case X of
-        true -> push1(Net, {pipe,That}, Data);
-        _ -> drop
-      end;
-    {{ filter, fn, _Fun }, drop} ->
-      drop;
-    {{ filter, fn, Fun }, _} ->
-      X = Fun(Data),
-      case X of
-        true -> push1(Net, {pipe,That}, Data);
-        _ -> drop
-      end
+%%--------------------------------------------------------------------
+%% @doc
+%% Push Data into a stream identified by Label into a Flow.
+%% The data will stream through the flow producing effects
+%% as it is handled by a network of connected operators.
+%% Optionally audit.
+%% @end
+%%--------------------------------------------------------------------
+-spec push(flow(), label(), data(), ctx(), boolean()) -> {data(), ctx(), [audit()]}.
+push({flow,Net}, Label, Data, InitCtx, ShouldAudit) ->
+  case dict:find(Label, Net) of
+    {ok, Pipe} ->
+      BeamState = #beam_state{ctx=InitCtx, should_audit=ShouldAudit},
+      {Res, #beam_state{ctx=Ctx, audit=Audit}} = push2(Net, Pipe, Data, BeamState),
+      {Res, Ctx, Audit};
+    error -> throw({invalid_label, Label})
   end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Replace occurances of the atom 'in' with the term V in the list
+%% Produce a human eye friendly representation of the flow.
 %% @end
 %%--------------------------------------------------------------------
--spec infill([any()],any()) -> [any()].
-infill(L, V) -> lists:map(fun(in) -> V; (X) -> X end, L).
+-spec net(flow()) -> proplists:proplist().
+net({flow, Net}) -> dict:to_list(Net).
+
+%% internals
+push2(_Net, [], Data, BeamState) ->
+  {{ok, Data}, BeamState};
+push2(Net, [{filter, {fn, Fun}, _As}=Filter|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
+  R = Fun(Data, Ctx),
+  BeamState2 = maybe_audit(Filter, Ctx, Data, R, BeamState),
+  case R of
+    true -> push2(Net, T, Data, BeamState2);
+    _ -> {drop, BeamState2}
+  end;
+push2(Net, [{filter, {mfa, M,F,A}, _As}=Filter|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
+  R = erlang:apply(M,F,infill(A, Data, Ctx)),
+  BeamState2 = maybe_audit(Filter, Ctx, Data, R, BeamState),
+  case R of
+    true -> push2(Net, T, Data, BeamState2);
+    _ -> {drop, BeamState2}
+  end;
+push2(Net, [{transform, {fn, Fun}, _As}=Transform|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
+  {R, Ctx2} = Fun(Data, Ctx),
+  BeamState2 = BeamState#beam_state{ctx=Ctx2},
+  BeamState3 = maybe_audit(Transform, Ctx, Data, R, BeamState2),
+  push2(Net, T, R, BeamState3);
+push2(Net, [{transform, {mfa, M,F,A}, _As}=Transform|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
+  % assumption: if no ctx is provided in params - don't expect context back
+  {R, Ctx2} = case lists:member(ctx, A) of
+    true -> erlang:apply(M,F,infill(A, Data, Ctx));
+    false -> {erlang:apply(M,F,infill(A, Data, ignore)), Ctx}
+  end,
+  BeamState2 = BeamState#beam_state{ctx=Ctx2},
+  BeamState3 = maybe_audit(Transform, Ctx, Data, R, BeamState2),
+  push2(Net, T, R, BeamState3);
+push2(Net, [{branch, Branches}|T], Data, BeamState) ->
+  BeamState2 = lists:foldl(
+    fun(Branch, #beam_state{ctx=Ctx}=Bs) ->
+      Pipe = dict:fetch(Branch, Net),
+      {R, Bs2} = push2(Net, Pipe, Data, Bs),
+      Bs3 = maybe_audit({branch, Branch}, Ctx, Data, branch_res(R), Bs2),
+      Bs3
+    end,
+    BeamState,
+    Branches),
+  {_, BeamState3} = push2(Net, T, Data, BeamState2),
+  {branch, BeamState3}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Replace occurances of the atom 'in' and 'ctx' with the term In
+%% and Ctx in the list.
+%% @end
+%%--------------------------------------------------------------------
+infill(L, In, Ctx) ->
+  lists:map(
+    fun(in) -> In;
+       (ctx) -> Ctx;
+       (X) -> X
+    end,
+    L).
+
+heads_and_last([]) -> {[], undefined};
+heads_and_last(L) ->
+  [Last|T] = lists:reverse(L),
+  {lists:reverse(T), Last}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% if 'should_audit' is set, produce an audit log on filters,
+%% transforms and branches.
+%% @end
+%%--------------------------------------------------------------------
+maybe_audit(_, _, _, _, #beam_state{should_audit=false}=BeamState) ->
+  BeamState;
+maybe_audit({filter, _, As}, Ctx, In, Out, #beam_state{audit=Audit}=BeamState) ->
+  BeamState#beam_state{audit=Audit++[{filter, As, {ctx,Ctx}, {in,In}, {out,Out}}]};
+maybe_audit({transform, _, As}, Ctx, In, Out, #beam_state{audit=Audit}=BeamState) ->
+  BeamState#beam_state{audit=Audit++[{transform, As, {ctx,Ctx}, {in,In}, {out,Out}}]};
+maybe_audit({branch, As}, Ctx, In, Out, #beam_state{audit=Audit}=BeamState) ->
+  BeamState#beam_state{audit=Audit++[{branch, As, {ctx,Ctx}, {in,In}, {out,Out}}]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deal with transforms/filters that do not expect Ctx propagation,
+%% and only work off the streamed events.
+%% @end
+%%--------------------------------------------------------------------
+maybe_ignore_ctx(filter, {fn, Fun}=FunSpec) ->
+  {arity, N} = erlang:fun_info(Fun, arity),
+  case N of
+    1 -> {fn, fun(X, _Ctx) -> Fun(X) end};
+    2 -> FunSpec;
+    _ -> throw({invalid_arity, FunSpec})
+  end;
+maybe_ignore_ctx(transform, {fn, Fun}=FunSpec) ->
+  {arity, N} = erlang:fun_info(Fun, arity),
+  case N of
+    1 -> {fn, fun(X, Ctx) -> {Fun(X), Ctx} end};
+    2 -> FunSpec;
+    _ -> throw({invalid_arity, FunSpec})
+  end.
+
+branch_res({ok, R}) -> R;
+branch_res(branch) -> branch;
+branch_res(drop) -> drop.

@@ -3,3 +3,4 @@ logs
 ebin
 tags
 **.beam
+.plt
