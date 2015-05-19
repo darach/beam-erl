@@ -59,7 +59,7 @@
 -type data()      :: any().
 -type ctx()       :: any().
 -type audit()     :: { filter|transform|branch, label(), {ctx,ctx()}, {in,data()}, {out,data()}}.
--type exec()      :: { fn, function() } | { mfa, module(), function(), [data()] }.
+-type exec()      :: { fn, function() } | { mfa, module(), atom(), [data()] }.
 
 -export_type([flow/0]).
 -export_type([operator/0]).
@@ -87,7 +87,7 @@ filter(Fun, As) when is_function(Fun) ->
 %% Define a filter oepration given a Module, Fun and Arguments
 %% @end
 %%--------------------------------------------------------------------
--spec filter(module(), function(), [data()], label()) -> filter().
+-spec filter(module(), atom(), [data()], label()) -> filter().
 filter(M,F,A, As) when is_atom(M), is_atom(F), is_list(A) ->
   {filter, {mfa, M,F,A}, As}.
 
@@ -105,7 +105,7 @@ transform(Fun, As) when is_function(Fun) ->
 %% Define a transform operation given a Module, Fun and Arguments
 %% @end
 %%--------------------------------------------------------------------
--spec transform(module(), function(), [data()], label()) -> transform().
+-spec transform(module(), atom(), [data()], label()) -> transform().
 transform(M,F,A, As) when is_atom(M), is_atom(F), is_list(A) ->
   {transform, {mfa, M,F,A}, As}.
 
@@ -212,7 +212,7 @@ push({flow,Net}, Label, Data, InitCtx, ShouldAudit) ->
 %% Produce a human eye friendly representation of the flow.
 %% @end
 %%--------------------------------------------------------------------
--spec net(flow()) -> proplists:proplists().
+-spec net(flow()) -> proplists:proplist().
 net({flow, Net}) -> dict:to_list(Net).
 
 %% internals
