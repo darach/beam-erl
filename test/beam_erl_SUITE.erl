@@ -58,7 +58,10 @@ groups() ->
                     , t_ctx_audit_branch_combine
                     , t_ctx_complex
                     , t_audit_complex
-                    , depth_first
+                    , t_depth_first
+                    , t_splitter_fn
+                    , t_splitter_mfa
+                    , t_invalid_splitter
                     ]},
      {beam_bifs, [], [
                        t_eq
@@ -446,7 +449,7 @@ t_audit_complex(_Config) ->
 %% t(*X) == transform Event * X
 %% t(sink) == record Event in Ctx
 %%--------------------------------------------------------------------
-depth_first(_Config) ->
+t_depth_first(_Config) ->
     Gt    = fun(Y) -> beam_flow:filter(fun(X, _Ctx) -> X > Y end, {gt, Y}) end,
     Times = fun(Y) -> beam_flow:transform(fun(X, Ctx) -> {X*Y, Ctx} end, {times, Y}) end,
     Sink  = beam_flow:transform(fun(X, Ctx) -> {X, Ctx++[X]} end, sink),
@@ -511,3 +514,32 @@ depth_first(_Config) ->
                  {branch,union,{ctx,[11110,111100]},{in,1111000},{out,1111000}},
                  {branch,b3,{ctx,[11110,111100]},{in,1111},{out,branch}}],
     {branch, ExpCtx4, ExpAudit4} = beam_flow:push(F7, source, 1111, [], true).
+
+%%--------------------------------------------------------------------
+%% Splitter tests, generate multiple downstream events in the flow.
+%%--------------------------------------------------------------------
+t_splitter_fn(_Config) ->
+    Splitter = beam_flow:splitter(fun(X, Ctx) -> {[X, X+1, X+2], Ctx} end, three_x_splitter),
+    Sink  = beam_flow:transform(fun(X, Ctx) -> {X, Ctx++[X]} end, sink),
+    F = beam_flow:pipe(beam_flow:new(), source, [Splitter, Sink]),
+    {branch, [0,1,2]} = beam_flow:push(F, source, 0, []),
+    ExpAudit = [{splitter,three_x_splitter,{ctx,[]},{in,0},{out,[0,1,2]}},
+                {transform,sink,{ctx,[]},{in,0},{out,0}},
+                {transform,sink,{ctx,[0]},{in,1},{out,1}},
+                {transform,sink,{ctx,[0,1]},{in,2},{out,2}}],
+    {branch, [0,1,2], ExpAudit} = beam_flow:push(F, source, 0, [], true).
+
+t_splitter_mfa(_Config) ->
+    Splitter = beam_flow:splitter(erlang, atom_to_list, [in], atom_to_list_splitter),
+    Sink  = beam_flow:transform(fun(X, Ctx) -> {X, Ctx++[X]} end, sink),
+    F = beam_flow:pipe(beam_flow:new(), source, [Splitter, Sink]),
+    {branch, [$a,$b,$c,$d,$e,$f]} = beam_flow:push(F, source, abcdef, []).
+
+t_invalid_splitter(_Config) ->
+    Splitter = beam_flow:splitter(fun(_) -> atom_not_a_list end, invalid_splitter),
+    F = beam_flow:pipe(beam_flow:new(), source, [Splitter]),
+    try
+      beam_flow:push(F, source, boo, []),
+      throw(splitter_not_returning_list)
+    catch throw:{splitter_returns_non_list,invalid_splitter,atom_not_a_list} -> ok
+    end.
