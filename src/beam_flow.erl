@@ -31,6 +31,8 @@
 -export([filter/4]).
 -export([transform/2]).
 -export([transform/4]).
+-export([splitter/2]).
+-export([splitter/4]).
 -export([branch/3]).
 -export([branch/4]).
 -export([combine/3]).
@@ -54,11 +56,12 @@
 -type flow()      :: { flow, dict() }.
 -type filter()    :: { filter, exec(), label() }.
 -type transform() :: { transform, exec(), label() }.
+-type splitter()  :: { splitter, exec(), label() }.
 -type operator()  :: filter() | transform().
 -type label()     :: any().
 -type data()      :: any().
 -type ctx()       :: any().
--type audit()     :: { filter|transform|branch, label(), {ctx,ctx()}, {in,data()}, {out,data()}}.
+-type audit()     :: { filter|transform|splitter|branch, label(), {ctx,ctx()}, {in,data()}, {out,data()}}.
 -type exec()      :: { fn, function() } | { mfa, module(), atom(), [data()] }.
 
 -export_type([flow/0]).
@@ -108,6 +111,24 @@ transform(Fun, As) when is_function(Fun) ->
 -spec transform(module(), atom(), [data()], label()) -> transform().
 transform(M,F,A, As) when is_atom(M), is_atom(F), is_list(A) ->
   {transform, {mfa, M,F,A}, As}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Define a splitter operation given a function returning a function
+%% @end
+%%--------------------------------------------------------------------
+-spec splitter(function(), label()) -> splitter().
+splitter(Fun, As) when is_function(Fun) ->
+  {splitter, maybe_ignore_ctx(splitter, {fn, Fun}), As}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Define a splitter operation given a Module, Fun and Arguments
+%% @end
+%%--------------------------------------------------------------------
+-spec splitter(module(), atom(), [data()], label()) -> splitter().
+splitter(M,F,A, As) when is_atom(M), is_atom(F), is_list(A) ->
+  {splitter, {mfa, M,F,A}, As}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -238,7 +259,7 @@ push2(Net, [{transform, {fn, Fun}, _As}=Transform|T], Data, #beam_state{ctx=Ctx}
   BeamState3 = maybe_audit(Transform, Ctx, Data, R, BeamState2),
   push2(Net, T, R, BeamState3);
 push2(Net, [{transform, {mfa, M,F,A}, _As}=Transform|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
-  % assumption: if no ctx is provided in params - don't expect context back
+  % if no ctx is provided in params - don't expect context back
   {R, Ctx2} = case lists:member(ctx, A) of
     true -> erlang:apply(M,F,infill(A, Data, Ctx));
     false -> {erlang:apply(M,F,infill(A, Data, ignore)), Ctx}
@@ -246,6 +267,42 @@ push2(Net, [{transform, {mfa, M,F,A}, _As}=Transform|T], Data, #beam_state{ctx=C
   BeamState2 = BeamState#beam_state{ctx=Ctx2},
   BeamState3 = maybe_audit(Transform, Ctx, Data, R, BeamState2),
   push2(Net, T, R, BeamState3);
+push2(Net, [{splitter, {fn, Fun}, As}=Splitter|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
+  {Results, Ctx2} = Fun(Data, Ctx),
+  case is_list(Results) of
+    true -> ok;
+    _ -> throw({splitter_returns_non_list,As,Results})
+  end,
+  BeamState2 = BeamState#beam_state{ctx=Ctx2},
+  BeamState3 = maybe_audit(Splitter, Ctx, Data, Results, BeamState2),
+  BeamState4 = lists:foldl(
+    fun(R, BS) ->
+      {_, BS2} = push2(Net, T, R, BS),
+      BS2
+    end,
+    BeamState3,
+    Results),
+  {branch, BeamState4};
+push2(Net, [{splitter, {mfa, M,F,A}, As}=Splitter|T], Data, #beam_state{ctx=Ctx}=BeamState) ->
+  % if no ctx is provided in params - don't expect context back
+  {Results, Ctx2} = case lists:member(ctx, A) of
+    true -> erlang:apply(M,F,infill(A, Data, Ctx));
+    false -> {erlang:apply(M,F,infill(A, Data, ignore)), Ctx}
+  end,
+  case is_list(Results) of
+    true -> ok;
+    _ -> throw({splitter_returns_non_list,As,Results})
+  end,
+  BeamState2 = BeamState#beam_state{ctx=Ctx2},
+  BeamState3 = maybe_audit(Splitter, Ctx, Data, Results, BeamState2),
+  BeamState4 = lists:foldl(
+    fun(R, BS) ->
+      {_, BS2} = push2(Net, T, R, BS),
+      BS2
+    end,
+    BeamState3,
+    Results),
+  {branch, BeamState4};
 push2(Net, [{branch, Branches}|T], Data, BeamState) ->
   BeamState2 = lists:foldl(
     fun(Branch, #beam_state{ctx=Ctx}=Bs) ->
@@ -290,6 +347,8 @@ maybe_audit({filter, _, As}, Ctx, In, Out, #beam_state{audit=Audit}=BeamState) -
   BeamState#beam_state{audit=Audit++[{filter, As, {ctx,Ctx}, {in,In}, {out,Out}}]};
 maybe_audit({transform, _, As}, Ctx, In, Out, #beam_state{audit=Audit}=BeamState) ->
   BeamState#beam_state{audit=Audit++[{transform, As, {ctx,Ctx}, {in,In}, {out,Out}}]};
+maybe_audit({splitter, _, As}, Ctx, In, Out, #beam_state{audit=Audit}=BeamState) ->
+  BeamState#beam_state{audit=Audit++[{splitter, As, {ctx,Ctx}, {in,In}, {out,Out}}]};
 maybe_audit({branch, As}, Ctx, In, Out, #beam_state{audit=Audit}=BeamState) ->
   BeamState#beam_state{audit=Audit++[{branch, As, {ctx,Ctx}, {in,In}, {out,Out}}]}.
 
@@ -306,7 +365,7 @@ maybe_ignore_ctx(filter, {fn, Fun}=FunSpec) ->
     2 -> FunSpec;
     _ -> throw({invalid_arity, FunSpec})
   end;
-maybe_ignore_ctx(transform, {fn, Fun}=FunSpec) ->
+maybe_ignore_ctx(Type, {fn, Fun}=FunSpec) when Type=:=transform; Type=:=splitter ->
   {arity, N} = erlang:fun_info(Fun, arity),
   case N of
     1 -> {fn, fun(X, Ctx) -> {Fun(X), Ctx} end};
